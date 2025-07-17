@@ -26,10 +26,10 @@ void* receive_messages(void* arg) {
         
         if (bytes_received == 0) {
             printf("Server disconnected\n");
-            break;
+            break; 
         }
         
-        printf("Received: %s\n", buffer);
+        printf("%s\n", buffer);
     }
     
     return NULL;
@@ -62,7 +62,15 @@ int main() {
         perror("connect failed");
         exit(EXIT_FAILURE);
     }
-    
+        // Read prompt from server
+    read(sock, message, BUFFER_SIZE);
+    printf("%s", message);  // Should print: Enter your pseudo:
+
+    // User enters pseudo
+    fgets(message, BUFFER_SIZE, stdin);
+    send(sock, message, strlen(message), 0);
+
+        
     printf("Connected to server!\n");
     
     // Create thread to receive messages
@@ -70,11 +78,26 @@ int main() {
     
     while(1) {
         // Get message from user
-        printf("Enter message (or 'exit' to quit): ");
+        printf("---> ");
         fgets(message, BUFFER_SIZE, stdin);
-        
+
+        // Remove newline from input
+        message[strcspn(message, "\n")] = 0;
+     
         // Check for exit command
-        if (strncmp(message, "exit", 4) == 0) {
+        if (strncmp(message, "help", 4) == 0) {
+            printf("Available commands:\n");
+            printf("1. help - Show this help message\n");
+            printf("2. exit - Disconnect from server\n");
+            printf("3. mp - send mp to any person\n");
+            continue;
+        }
+          
+        if (strlen(message) == 0) {
+            continue; // Skip empty messages
+        }
+        
+        if (strncmp(message, "/exit", 4) == 0) {
             break;
         }
         
