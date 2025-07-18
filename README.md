@@ -1,2 +1,2 @@
 # chat-IRC
-chat irc project using many technologies
+chat irc project using different technologies
