@@ -89,7 +89,7 @@ int main() {
             printf("Available commands:\n");
             printf("1. help - Show this help message\n");
             printf("2. exit - Disconnect from server\n");
-            printf("3. mp - send mp to any person\n");
+            printf("3. mp - send mp to any person\n"); //TODO - add a mp feature
             continue;
         }
           
