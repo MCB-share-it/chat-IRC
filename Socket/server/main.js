@@ -1,77 +1,76 @@
 const net = require('net');
-const bcrypt = require('bcrypt');
+const {
+  userExists,
+  createUser,
+  validateLogin
+} = require('./userManager');
 
 const PORT = 8080;
 
-async function hashPassword(password) {
-  const saltRounds = 10;
-
-  try {
-    // Hash the password
-    const hashed = await bcrypt.hash(password, saltRounds);
-    console.log('Hashed password:', hashed);
-
-    // Later: verify the password
-    const isMatch = await bcrypt.compare(password, hashed);
-    console.log('Password match:', isMatch); // true
-  } catch (err) {
-    console.error('Error hashing password:', err);
-  }
-}
-
 const server = net.createServer((socket) => {
-  console.log('Client connected:', socket.remoteAddress + ':' + socket.remotePort);
+  console.log('Client connected:', socket.remoteAddress);
 
-  let mode = null;         // 'login' or 'create'
-  let clientPseudo = null;
+  let mode = null;
+  let step = null;
+  let username = null;
+  let loggedIn = false;
 
-  // ask for login or create account
   socket.write('Type "L" to Login or "C" to Create an account:\n');
 
-  socket.on('data', (data) => {
-    const message = data.toString().trim();
+  socket.on('data', async (data) => {
+    const msg = data.toString().trim();
 
     if (!mode) {
-      switch (message.toUpperCase()) {
-        case ('L'):
-          mode = 'login';
-          socket.write('You chose to Login. Enter your pseudo:\n');
-          break;
-
-        case ('C'):
-          mode = 'create';
-          socket.write('You chose to Create an account. Enter your pseudo:\n');
-          break;
-
-        default:
-          socket.write('Invalid input. Please type "L" or "C":\n');
-          break;
+      if (msg === 'L' || msg === 'C') {
+        mode = msg === 'L' ? 'login' : 'create';
+        step = 'username';
+        return socket.write('Enter username:\n');
       }
-      return;
+      return socket.write('Invalid input. Type "L" or "C":\n');
     }
 
-    // ask for pseudo
-    if (!clientPseudo) {
-      clientPseudo = message;
-      console.log(`[${mode.toUpperCase()}] Client chose pseudo: ${clientPseudo}`);
-      socket.write(`Welcome, ${clientPseudo}!\n`);
-      return;
+    if (step === 'username') {
+      username = msg;
+
+      if (mode === 'create' && userExists(username))
+        return socket.write('Username exists, try another:\n');
+
+      if (mode === 'login' && !userExists(username))
+        return socket.write('Username not found, try again:\n');
+
+      step = 'password';
+      return socket.write('Enter password:\n');
     }
 
-    // Step 4: Handle normal messages
-    console.log(`[${clientPseudo}] says: ${message}`);
-    socket.write(`${message}\n`);
+    if (step === 'password') {
+      const password = msg;
+
+      if (mode === 'create') {
+        const created = await createUser(username, password);
+        if (!created) return socket.write('User creation failed.\n');
+        socket.write(`Account created! Welcome, ${username}.\n`);
+      } else {
+        const valid = await validateLogin(username, password);
+        if (!valid) return socket.write('Incorrect password. Try again:\n');
+        socket.write(`Login successful! Welcome, ${username}.\n`);
+      }
+
+      loggedIn = true;
+      mode = 'chat';
+      step = null;
+      return socket.write('You can now send messages.\n');
+    }
+
+    if (mode === 'chat' && loggedIn) {
+      console.log(`[${username}] says: ${msg}`);
+      socket.write(`You: ${msg}\n`);
+    }
   });
 
-  socket.on('end', () => {
-    console.log(`Client ${clientPseudo || socket.remoteAddress} disconnected`);
-  });
-
-  socket.on('error', (err) => {
-    console.error('Socket error:', err);
-  });
+  socket.on('end', () => console.log(`Client ${username || socket.remoteAddress} disconnected`));
+  socket.on('error', (err) => console.error('Socket error:', err));
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
