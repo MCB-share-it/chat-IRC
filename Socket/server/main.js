@@ -1,15 +1,12 @@
 const net = require('net');
-const {
-  userExists,
-  createUser,
-  validateLogin
-} = require('./userManager');
+const { userExists, createUser, validateLogin, getPublicKey, setPublicKey } = require('./userManager');
 
 const PORT = 8080;
 
-const server = net.createServer((socket) => {
-  console.log('Client connected:', socket.remoteAddress);
+const clients = new Map(); // username -> socket
+const currentChats = new Map(); // username -> target username for private chat
 
+const server = net.createServer((socket) => {
   let mode = null;
   let step = null;
   let username = null;
@@ -58,24 +55,84 @@ const server = net.createServer((socket) => {
       loggedIn = true;
       mode = 'chat';
       step = null;
-      return socket.write('You can now send messages.\n');
+      socket.username = username;
+
+      clients.set(username, socket);
+
+      return socket.write(
+        'You can now send messages.\n' +
+        'Send your public key using:\nPUBKEY <your PEM-formatted key>\n' +
+        'Use "/mp <username>" to start a private conversation.\n'
+      );
     }
 
     if (mode === 'chat' && loggedIn) {
-      console.log(`[${username}] says: ${msg}`);
-      socket.write(`You: ${msg}\n`);
+      if (msg.startsWith('PUBKEY ')) {
+        const raw = msg.slice(7);
+        const keyBase64 = raw
+          .replace(/-----(BEGIN|END) PUBLIC KEY-----/g, '')
+          .replace(/\r?\n|\r/g, '');
+        if (setPublicKey(username, keyBase64)) {
+          return socket.write('Public key saved - ok.\n');
+        }
+        return socket.write('Public key saved - error.\n');
+      }
+
+      if (msg.startsWith('/mp ')) {
+        const target = msg.split(' ')[1];
+        if (!target) {
+          return socket.write('Usage: /mp <username>\n');
+        }
+
+        if (!userExists(target)) {
+          return socket.write(`ERROR: User ${target} does not exist.\n`);
+        }
+
+        const pubKeyBase64 = getPublicKey(target);
+        if (!pubKeyBase64) {
+          return socket.write(`ERROR: Public key for ${target} not found.\n`);
+        }
+
+        const targetPEM = `-----BEGIN PUBLIC KEY-----\n${pubKeyBase64}\n-----END PUBLIC KEY-----`;
+
+        currentChats.set(username, target);
+
+        socket.write(`TARGET_PUBLIC_KEY ${target} ${targetPEM}\n`);
+        socket.write(`Private chat started with ${target}. Encrypt your messages with this key.\n`);
+        return;
+      }
+
+      // Normal message sent by client — treat as encrypted message to current private chat target
+      const target = currentChats.get(username);
+      if (!target) {
+        return socket.write('No private chat target set. Use /mp <username> to start one.\n');
+      }
+
+      const targetSocket = clients.get(target);
+      if (!targetSocket) {
+        return socket.write(`ERROR: User ${target} not online.\n`);
+      }
+
+      // Forward the encrypted message to the target
+      targetSocket.write(`MP_FROM ${username} ${msg}\n`);
+      socket.write(`MP_SENT to ${target}\n`);
+      return;
     }
   });
 
   socket.on('end', () => {
-  const label = loggedIn ? username : socket.remoteAddress;
-  console.log(`Client ${label} disconnected`);
+    if (loggedIn && username) {
+      clients.delete(username);
+      currentChats.delete(username);
+      console.log(`Client ${username} disconnected`);
+    } else {
+      console.log(`Client disconnected`);
+    }
   });
-  socket.on('close', () => {
-    const label = loggedIn ? username : socket.remoteAddress;
-    console.log(`Client ${label} closed connection`);
+
+  socket.on('error', (err) => {
+    console.error('Socket error:', err);
   });
-  socket.on('error', (err) => console.error('Socket error:', err));
 });
 
 server.listen(PORT, () => {
