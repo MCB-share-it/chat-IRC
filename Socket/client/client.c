@@ -12,6 +12,14 @@
 // Thread function declaration
 void* receive_messages(void* arg);
 
+void fgets_and_send(int sock, char* buf, size_t sz) {
+    if (!fgets(buf, sz, stdin)) return;
+    buf[strcspn(buf, "\n")] = '\0';
+    send(sock, buf, strlen(buf), 0);
+}
+
+
+
 int main() {
     int sock = 0;
     struct sockaddr_in serv_addr;
@@ -46,23 +54,24 @@ int main() {
     read(sock, message, BUFFER_SIZE);
     printf("%s", message);
 
-    fgets(message, BUFFER_SIZE, stdin);
-    send(sock, message, strlen(message), 0);
+    // Mode L/C
+    fgets_and_send(sock, message, BUFFER_SIZE);
 
     read(sock, message, BUFFER_SIZE);
     printf("%s", message);
 
-    fgets(message, BUFFER_SIZE, stdin);
-    send(sock, message, strlen(message), 0);
+    // Username
+    fgets_and_send(sock, message, BUFFER_SIZE);
 
     read(sock, message, BUFFER_SIZE);
     printf("%s", message);
 
-    fgets(message, BUFFER_SIZE, stdin);
-    send(sock, message, strlen(message), 0);
+    // Password
+    fgets_and_send(sock, message, BUFFER_SIZE);
 
     read(sock, message, BUFFER_SIZE);
     printf("%s", message);
+
 
     if (strstr(message, "Login successful") || strstr(message, "Account created")) {
         for (int i = 0; public_key_pem[i]; i++) {
