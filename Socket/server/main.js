@@ -67,10 +67,18 @@ const server = net.createServer((socket) => {
     }
   });
 
-  socket.on('end', () => console.log(`Client ${username || socket.remoteAddress} disconnected`));
+  socket.on('end', () => {
+  const label = loggedIn ? username : socket.remoteAddress;
+  console.log(`Client ${label} disconnected`);
+  });
+  socket.on('close', () => {
+    const label = loggedIn ? username : socket.remoteAddress;
+    console.log(`Client ${label} closed connection`);
+  });
   socket.on('error', (err) => console.error('Socket error:', err));
 });
 
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
+
