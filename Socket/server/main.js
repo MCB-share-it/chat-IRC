@@ -60,9 +60,7 @@ const server = net.createServer((socket) => {
       clients.set(username, socket);
 
       return socket.write(
-        'You can now send messages.\n' +
-        'Send your public key using:\nPUBKEY <your PEM-formatted key>\n' +
-        'Use "/mp <username>" to start a private conversation.\n'
+        ' /help to acces all commands .\n'
       );
     }
 
@@ -97,7 +95,7 @@ const server = net.createServer((socket) => {
 
         currentChats.set(username, target);
 
-        socket.write(`TARGET_PUBLIC_KEY ${target} ${targetPEM}\n`);
+        //socket.write(`TARGET_PUBLIC_KEY ${target} ${targetPEM}\n`);
         socket.write(`Private chat started with ${target}. Encrypt your messages with this key.\n`);
         return;
       }
@@ -114,8 +112,8 @@ const server = net.createServer((socket) => {
       }
 
       // Forward the encrypted message to the target
-      targetSocket.write(`MP_FROM ${username} ${msg}\n`);
-      socket.write(`MP_SENT to ${target}\n`);
+      targetSocket.write(`mp from :  ${username} ${msg}\n`);
+      socket.write(`mp sent to ${target}\n`);
       return;
     }
   });
@@ -138,4 +136,3 @@ const server = net.createServer((socket) => {
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
-
