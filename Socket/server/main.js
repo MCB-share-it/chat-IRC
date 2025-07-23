@@ -1,5 +1,7 @@
 const net = require('net');
 const { userExists, createUser, validateLogin, getPublicKey, setPublicKey } = require('./userManager');
+const { saveMessage, getPendingMessages, cleanOldMessages } = require('./conversationManager');
+
 
 const PORT = 8080;
 
@@ -56,6 +58,15 @@ const server = net.createServer((socket) => {
       mode = 'chat';
       step = null;
       socket.username = username;
+      // After login success, send pending messages to user if any
+      const pendingMsgs = getPendingMessages(username);
+      if (pendingMsgs.length > 0) {
+        socket.write(`You have ${pendingMsgs.length} pending message(s):\n`);
+        for (const msg of pendingMsgs) {
+          socket.write(`mp from : ${msg.sender} ${msg.message}\n`);
+        }
+      }
+
 
       clients.set(username, socket);
 
@@ -86,6 +97,10 @@ const server = net.createServer((socket) => {
           return socket.write(`ERROR: User ${target} does not exist.\n`);
         }
 
+        if (target === username) {
+          return socket.write('You cannot send a private message to yourself.\n');
+        }  
+
         const pubKeyBase64 = getPublicKey(target);
         if (!pubKeyBase64) {
           return socket.write(`ERROR: Public key for ${target} not found.\n`);
@@ -107,16 +122,22 @@ const server = net.createServer((socket) => {
       }
 
       const targetSocket = clients.get(target);
-      if (!targetSocket) {
-        return socket.write(`ERROR: User ${target} not online.\n`);
+
+      if (targetSocket) {
+        // User online, forward message immediately
+        targetSocket.write(`mp from :  ${username} ${msg}\n`);
+      } else {
+        // User offline, save the message for later delivery
+        // (Already done below, so no error)
       }
 
-      // Forward the encrypted message to the target
-      targetSocket.write(`mp from :  ${username} ${msg}\n`);
+      // Save the encrypted message to conversation history in all cases
+      saveMessage(username, target, msg);
+
       socket.write(`mp sent to ${target}\n`);
       return;
-    }
-  });
+  }
+  })
 
   socket.on('end', () => {
     if (loggedIn && username) {
@@ -136,3 +157,8 @@ const server = net.createServer((socket) => {
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
+
+setInterval(() => {
+  cleanOldMessages();
+  console.log('Old messages cleaned up');
+}, 60 * 60 * 1000); // every hour
