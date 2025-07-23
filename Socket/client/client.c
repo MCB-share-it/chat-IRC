@@ -136,15 +136,19 @@ int main() {
                 fprintf(stderr, "Encryption failed\n");
                 continue;
             }
-            send(sock, encrypted_b64, strlen(encrypted_b64), 0);
-            send(sock, "\n", 1, 0);
+            char sendbuf[BUFFER_SIZE];
+            snprintf(sendbuf, sizeof(sendbuf), "%s\n", encrypted_b64);
+            send(sock, sendbuf, strlen(sendbuf), 0);
+
 
             free(encrypted_b64);
             continue;
         }
 
-        send(sock, message, strlen(message), 0);
-        send(sock, "\n", 1, 0);
+        char sendbuf[BUFFER_SIZE];
+        snprintf(sendbuf, sizeof(sendbuf), "%s\n", message);
+        send(sock, sendbuf, strlen(sendbuf), 0);
+
     }
 
     close(sock);
