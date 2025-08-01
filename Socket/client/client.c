@@ -5,6 +5,8 @@
 #include <pthread.h>
 #include <arpa/inet.h>
 #include "crypto_utils.h"
+#include "conversationManager.h"
+
 
 #define PORT 8080
 #define BUFFER_SIZE 8192
@@ -124,11 +126,12 @@ int main() {
 
             send(sock, message, strlen(message), 0);
 
-            current_target[0] = 0;
-            target_pubkey_pem[0] = 0;
+            // Store target
+            strncpy(current_target, target, BUFFER_SIZE);
 
             continue;
         }
+
 
         if (strlen(current_target) > 0 && strlen(target_pubkey_pem) > 0) {
             char *encrypted_b64 = encrypt_with_pubkey(target_pubkey_pem, message);
@@ -178,7 +181,33 @@ void* receive_messages(void* arg) {
 
         printf("\n%s\n---> ", buffer);
         fflush(stdout);
+
+        // Expecting message format: "mp from alice <actual message>"
+        char sender[BUFFER_SIZE] = {0};
+        char content[BUFFER_SIZE] = {0};
+
+        if (strncmp(buffer, "mp from ", 8) == 0) {
+            // Parse sender and message
+            // Example: "mp from alice Hello Bob!"
+            char* ptr = buffer + 8;  // skip "mp from "
+            sscanf(ptr, "%s", sender);  // read sender
+
+            // Now get the rest of the message after the sender
+            char* msg_start = strchr(ptr, ' ');
+            if (msg_start != NULL) {
+                msg_start++; // skip space after sender
+                strncpy(content, msg_start + strlen(sender), BUFFER_SIZE - 1);
+            } else {
+                strncpy(content, "(no content)", BUFFER_SIZE);
+            }
+
+            save_message_to_json(sender, sender, content);
+        }
     }
 
     return NULL;
 }
+
+
+
+
