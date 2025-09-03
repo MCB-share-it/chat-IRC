@@ -11,7 +11,13 @@
 #define PORT 8080
 #define BUFFER_SIZE 8192
 
-// Thread function declaration
+struct ThreadArgs {
+    int sock;
+    char my_username[BUFFER_SIZE];
+};
+
+
+//Thread function declaration
 void* receive_messages(void* arg);
 
 void fgets_and_send(int sock, char* buf, size_t sz) {
@@ -27,6 +33,7 @@ int main() {
     struct sockaddr_in serv_addr;
     char message[BUFFER_SIZE] = {0};
     pthread_t receive_thread;
+    char my_username[BUFFER_SIZE] = {0};
 
     char *public_key_pem = generate_rsa_pubkey_pem();
     if (!public_key_pem) {
@@ -64,6 +71,8 @@ int main() {
 
     // Username
     fgets_and_send(sock, message, BUFFER_SIZE);
+    strncpy(my_username, message, BUFFER_SIZE);  // Save your own username for conversation logging
+
 
     read(sock, message, BUFFER_SIZE);
     printf("%s", message);
@@ -89,7 +98,11 @@ int main() {
 
     printf("Connected to server!\n");
 
-    pthread_create(&receive_thread, NULL, receive_messages, &sock);
+    struct ThreadArgs* args = malloc(sizeof(struct ThreadArgs));
+    args->sock = sock;
+    strncpy(args->my_username, my_username, BUFFER_SIZE);
+    pthread_create(&receive_thread, NULL, receive_messages, args);
+
 
     char current_target[BUFFER_SIZE] = {0};
     char target_pubkey_pem[BUFFER_SIZE] = {0};
@@ -139,14 +152,17 @@ int main() {
                 fprintf(stderr, "Encryption failed\n");
                 continue;
             }
+
             char sendbuf[BUFFER_SIZE];
             snprintf(sendbuf, sizeof(sendbuf), "%s\n", encrypted_b64);
             send(sock, sendbuf, strlen(sendbuf), 0);
 
+            save_message_to_json(my_username, current_target, message);
 
             free(encrypted_b64);
             continue;
         }
+
 
         char sendbuf[BUFFER_SIZE];
         snprintf(sendbuf, sizeof(sendbuf), "%s\n", message);
@@ -160,7 +176,10 @@ int main() {
 }
 
 void* receive_messages(void* arg) {
-    int sock = *(int*)arg;
+    struct ThreadArgs* args = (struct ThreadArgs*)arg;
+    int sock = args->sock;
+    char* my_username = args->my_username;
+
     char buffer[BUFFER_SIZE] = {0};
 
     while (1) {
@@ -182,32 +201,26 @@ void* receive_messages(void* arg) {
         printf("\n%s\n---> ", buffer);
         fflush(stdout);
 
-        // Expecting message format: "mp from alice <actual message>"
+        // Expecting message format: "mp from alice : <actual message>"
         char sender[BUFFER_SIZE] = {0};
         char content[BUFFER_SIZE] = {0};
 
         if (strncmp(buffer, "mp from ", 8) == 0) {
-            // Parse sender and message
-            // Example: "mp from alice Hello Bob!"
-            char* ptr = buffer + 8;  // skip "mp from "
-            sscanf(ptr, "%s", sender);  // read sender
+            char* ptr = buffer + 8;
+            sscanf(ptr, "%s", sender);
 
-            // Now get the rest of the message after the sender
             char* msg_start = strchr(ptr, ' ');
             if (msg_start != NULL) {
-                msg_start++; // skip space after sender
+                msg_start++; // skip space
                 strncpy(content, msg_start + strlen(sender), BUFFER_SIZE - 1);
             } else {
                 strncpy(content, "(no content)", BUFFER_SIZE);
             }
 
-            save_message_to_json(sender, sender, content);
+            save_message_to_json(sender, my_username, content);
         }
     }
 
+    free(arg); 
     return NULL;
 }
-
-
-
-
