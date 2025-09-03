@@ -45,5 +45,6 @@ module.exports = {
   createUser,
   validateLogin,
   setPublicKey,
-  getPublicKey
+  getPublicKey,
+  cleanOLdMessages
 };
